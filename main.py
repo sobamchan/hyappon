@@ -292,4 +292,109 @@ def thirtynine():
     plt.show()
 
 
+class Morph(object):
+
+    def __init__(self, surface, base=None, pos=None, pos1=None):
+        self.surface = surface
+        self.base = base
+        self.pos = pos
+        self.pos1 = pos1
+    
+    def __str__(self):
+        return self.surface
+
+    def __repr__(self):
+        return self.__str__()
+
+
+def fourty_beta():
+    with open('./neko.txt.cabocha', 'r') as f:
+        raw_lines = f.readlines()
+    lines = []
+    deps = []
+    for raw_line in raw_lines:
+        if raw_line.startswith('*') :
+            deps.append(raw_line)
+            lines.append(Morph('<SEP>'))
+            continue
+        if 'EOS' in raw_line:
+            deps.append('<EOS>')
+            lines.append(Morph('<EOS>'))
+            continue
+        surface, features = raw_line.split('\t')
+        features = features.split(',')
+        lines.append(Morph(
+            surface, features[-2], features[0], features[1]
+            ))
+
+    return lines, deps
+
+def get_morph(line):
+    surface, features = line.split('\t')
+    features = features.split(',')
+
+    return (Morph(surface, features[-2], features[0], features[1]))
+
+def cabocha_parser():
+    with open('./neko.txt.cabocha', 'r') as f:
+        raw_lines = f.readlines()
+    deps = []
+    tmp_deps = []
+    # get all deps
+    for raw_line in raw_lines:
+        if 'EOS' in raw_line:
+            deps.append(tmp_deps)
+            tmp_deps = []
+        elif raw_line.startswith('*'):
+            tmp_deps.append(raw_line)
+
+    lines = []
+    tmp_line = []
+    morphs = []
+    # get all morphs
+    for i, raw_line in enumerate(raw_lines):
+        if 'EOS' in raw_line:
+            lines.append(tmp_line)
+            if len(morphs) != 0:
+                tmp_line.append(morphs)
+                morphs = []
+            tmp_line = []
+            morphs = []
+            continue
+        if raw_line.startswith('*'):
+            if len(morphs) != 0:
+                tmp_line.append(morphs)
+                morphs = []
+        else:
+            morphs.append(get_morph(raw_line))
+
+
+
+def fourty():
+    lines, deps = fourty_beta()
+    sep_lines = []
+    tmp_lines = []
+    for line in lines:
+        if line.surface != '<EOS>' and line.surface != '<SEP>':
+            tmp_lines.append(line)
+        else:
+            sep_lines.append(tmp_lines)
+            tmp_lines = []
+    
+    return sep_lines, deps
+
+
+class Chunk(object):
+    
+    def __init__(self):
+        pass
+
+
+def fourtyone():
+    sep_lines, deps = fourty()
+    print(sep_lines[0])
+    print(deps[len(deps)-1])
+
+
+
 fire.Fire()
