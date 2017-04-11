@@ -1,3 +1,5 @@
 *.json
 *.txt.mecab
 *.txt
+*.txt.cabocha
+*.txt.cabocha.tree
