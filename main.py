@@ -338,15 +338,20 @@ def get_morph(line):
 def cabocha_parser():
     with open('./neko.txt.cabocha', 'r') as f:
         raw_lines = f.readlines()
+    deps_ids = []
+    tmp_deps_ids = []
     deps = []
     tmp_deps = []
     # get all deps
     for raw_line in raw_lines:
         if 'EOS' in raw_line:
             deps.append(tmp_deps)
+            deps_ids.append(tmp_deps_ids)
             tmp_deps = []
+            tmp_deps_ids = []
         elif raw_line.startswith('*'):
-            tmp_deps.append(raw_line)
+            tmp_deps.append(raw_line.split()[2].replace('D', ''))
+            tmp_deps_ids.append(raw_line.split()[1])
 
     lines = []
     tmp_line = []
@@ -368,33 +373,109 @@ def cabocha_parser():
         else:
             morphs.append(get_morph(raw_line))
 
+    return lines, deps, deps_ids
 
 
 def fourty():
-    lines, deps = fourty_beta()
-    sep_lines = []
-    tmp_lines = []
-    for line in lines:
-        if line.surface != '<EOS>' and line.surface != '<SEP>':
-            tmp_lines.append(line)
-        else:
-            sep_lines.append(tmp_lines)
-            tmp_lines = []
-    
-    return sep_lines, deps
+    lines, deps, _ = cabocha_parser()
+    return lines, deps
 
 
 class Chunk(object):
     
-    def __init__(self):
-        pass
+    def __init__(self, morphs, dst, dep_id, srcs):
+        self.morphs = morphs
+        self.dst = dst
+        self.dep_id = dep_id
+        self.srcs = srcs
 
+    def __str__(self):
+        rlt = ''
+        for morph in self.morphs:
+            rlt += ' ' + morph.surface
+        rlt += 'dst: {}, srcs: {}'.format(self.dst, self.srcs)
+        return rlt
+
+    def __repr__(self):
+        return self.__str__()
+
+    def get_surfaces(self):
+        surfaces = ''
+        for morph in self.morphs:
+            surfaces += morph.surface
+        return surfaces
+
+    def has_noun(self):
+        noun_morphs = list(filter(lambda morph:morph.pos == '名詞', self.morphs))
+        return len(noun_morphs) > 0
+
+    def has_verb(self):
+        verb_morphs = list(filter(lambda morph:morph.pos == '動詞', self.morphs))
+        return len(verb_morphs) > 0
 
 def fourtyone():
-    sep_lines, deps = fourty()
-    print(sep_lines[0])
-    print(deps[len(deps)-1])
+    lines, deps, deps_ids = cabocha_parser()
+    chunks = []
+    for line, dep, deps_id in zip(lines, deps, deps_ids):
+        dep = list(map(int, dep))
+        dep_stock = []
+        tmp_chunks = []
+        for i in range(len(line)):
+            morphs = line[i]
+            dst = dep[i]
+            dep_id = deps_id[i]
+            srcs = list(filter(lambda x:x == dst, dep[:i]))
+            tmp_chunks.append(Chunk(morphs, dst, dep_id, srcs))
+        chunks.append(tmp_chunks)
 
+    return chunks
 
+def fourtytwo():
+    chunk_list = fourtyone()
+    relations = []
+    for chunks in chunk_list:
+        for i, chunk in enumerate(chunks):
+            dst_chunks = list(filter(lambda x: chunk.dst in x.srcs, chunks[i+1:]))
+            if len(dst_chunks) != 0:
+                dst_surfaces = ''
+                for dst_chunk in dst_chunks:
+                    dst_surfaces += dst_chunk.get_surfaces()
+                relations.append('{} \t {}'.format(chunk.get_surfaces(), dst_surfaces))
+    print(relations)
+
+def fourtythree():
+    chunk_list = fourtyone()
+    relations = []
+    for chunks in chunk_list:
+        for i, chunk in enumerate(chunks):
+            if chunk.has_noun():
+                dst_chunks = list(filter(lambda x: chunk.dst in x.srcs, chunks[i+1:]))
+                for dst_chunk in dst_chunks:
+                    if dst_chunk.has_verb():
+                        relations.append('{}\t{}'.format(chunk.get_surfaces(), dst_chunk.get_surfaces()))
+                        break
+    print(relations)
+
+def fourtyfour():
+    import pydot
+    chunk_list = fourtyone()
+    chunks = chunk_list[10]
+    edges = []
+    for chunk in chunks:
+        edges.append((int(chunk.dep_id), chunk.dst))
+    g=pydot.graph_from_edges(edges)
+    g.write_jpeg('graph_from_edges_dot.jpg', prog='dot')
+
+# TODO 45 - 49
+
+def fifty():
+    import re
+    with open('./nlp.txt', 'r') as f:
+        lines = f.readlines()
+    lines = lines[2:]
+    content = ' '.join([line.strip() for line in lines])
+    ptn = r'^.+([.|;|:|?|!]\s[A-Z].+).+$'
+    matches = re.split(ptn, content)
+    print(matches[:5])
 
 fire.Fire()
