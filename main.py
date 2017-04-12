@@ -472,10 +472,105 @@ def fifty():
     import re
     with open('./nlp.txt', 'r') as f:
         lines = f.readlines()
-    lines = lines[2:]
-    content = ' '.join([line.strip() for line in lines])
-    ptn = r'^.+([.|;|:|?|!]\s[A-Z].+).+$'
-    matches = re.split(ptn, content)
-    print(matches[:5])
+    ptn = r'(?<=[^A-Z].[.?|.!|/;]) +(?=[A-Z])'
+    c = re.compile(ptn)
+    result = []
+    for line in lines:
+        result += c.split(line)
+
+    return result
+
+def fiftyone():
+    lines = fifty()
+    for line in lines:
+        for word in line.split():
+            print(word)
+        print('\n')
+
+def fiftytwo():
+    from stemming.porter2 import stem
+    lines = fifty()
+    for line in lines:
+        for word in line.split():
+            print(word, stem(word))
+        print('\n')
+
+def fiftythree():
+    import xml.etree.ElementTree as ET
+    tree = ET.parse('./nlp.txt.xml')
+    root = tree.getroot()
+    for sentences in root.iter('sentences'):
+        for sentence in sentences.iter('tokens'):
+            for token in sentence.iter('token'):
+                print(token.find('word').text)
+
+def fiftyfour():
+    import xml.etree.ElementTree as ET
+    tree = ET.parse('./nlp.txt.xml')
+    root = tree.getroot()
+    for sentences in root.iter('sentences'):
+        for sentence in sentences.iter('tokens'):
+            for token in sentence.iter('token'):
+                word = token.find('word').text
+                lemma = token.find('lemma').text
+                pos = token.find('POS').text
+                print('{}\t{}\t{}'.format(word, lemma, pos))
+
+def fiftyfive():
+    import xml.etree.ElementTree as ET
+    tree = ET.parse('./nlp.txt.xml')
+    root = tree.getroot()
+    for sentences in root.iter('sentences'):
+        for sentence in sentences.iter('tokens'):
+            for token in sentence.iter('token'):
+                word = token.find('word').text
+                lemma = token.find('lemma').text
+                pos = token.find('POS').text
+                ner = token.find('NER').text
+                if ner == 'PERSON':
+                    print(word)
+
+
+
+def fiftysix():
+    import xml.etree.ElementTree as ET
+    tree = ET.parse('./nlp.txt.xml')
+    root = tree.getroot()
+    # {sentence_id, start, end, text, represent_of}
+    references = {}
+    i = 0
+    for coreference in root.iter('coreference'):
+        for corefe in coreference.iter('coreference'):
+            mentions = {}
+            for mention in corefe.findall('mention'):
+                if 'representative' in mention.attrib.keys():
+                    mentions['rep'] = mention
+                else:
+                    if not 'hireps' in mentions.keys():
+                        mentions['hireps'] = []
+                    mentions['hireps'].append(mention)
+            
+            if len(mentions.keys()) != 0:
+                for hirep in mentions['hireps']:
+                    i += 1
+                    k = hirep.find('sentence').text
+                    references[k] = {}
+                    references[k]['replace_with'] = mentions['rep'].find('text').text
+                    references[k]['start'] = hirep.find('start').text
+                    references[k]['end'] = hirep.find('end').text
+                    references[k]['text'] = hirep.find('text').text
+
+    print(i)
+    print(len(references))
+    # result = ''
+    # for sentences in root.iter('sentences'):
+    #     for sentence in sentences.iter('sentence'):
+    #         tmp_tokens = []
+    #         tmp_texts = []
+    #         tmp_sentence = ''
+    #         for token in sentences.iter('tokens'):
+    #             tmp_tokens.append(token.attrib['id'])
+    #             tmp_texts.append(token.find('text').text)
+    #         if sentence.attrib['id'] in references.keys():
 
 fire.Fire()
