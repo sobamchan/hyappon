@@ -1,4 +1,8 @@
 import fire
+from sobamchan import sobamchan_utility
+from sobamchan import sobamchan_vocabulary
+
+util = sobamchan_utility.Utility()
 
 def one(s='stressed'):
     print(s[::-1])
@@ -530,8 +534,6 @@ def fiftyfive():
                 if ner == 'PERSON':
                     print(word)
 
-
-
 def fiftysix():
     import xml.etree.ElementTree as ET
     tree = ET.parse('./nlp.txt.xml')
@@ -542,7 +544,7 @@ def fiftysix():
     for coreference in root.iter('coreference'):
         for corefe in coreference.iter('coreference'):
             mentions = {}
-            for mention in corefe.findall('mention'):
+            for mention in corefe.iter('mention'):
                 if 'representative' in mention.attrib.keys():
                     mentions['rep'] = mention
                 else:
@@ -553,24 +555,299 @@ def fiftysix():
             if len(mentions.keys()) != 0:
                 for hirep in mentions['hireps']:
                     i += 1
-                    k = hirep.find('sentence').text
+                    k = int(hirep.find('sentence').text)
                     references[k] = {}
                     references[k]['replace_with'] = mentions['rep'].find('text').text
                     references[k]['start'] = hirep.find('start').text
                     references[k]['end'] = hirep.find('end').text
-                    references[k]['text'] = hirep.find('text').text
+                    references[k]['directive'] = hirep.find('text').text
 
-    print(i)
-    print(len(references))
-    # result = ''
-    # for sentences in root.iter('sentences'):
-    #     for sentence in sentences.iter('sentence'):
-    #         tmp_tokens = []
-    #         tmp_texts = []
-    #         tmp_sentence = ''
-    #         for token in sentences.iter('tokens'):
-    #             tmp_tokens.append(token.attrib['id'])
-    #             tmp_texts.append(token.find('text').text)
-    #         if sentence.attrib['id'] in references.keys():
+    for sentences in root.iter('sentences'):
+        for sentence in sentences.iter('sentence'):
+            sid = int(sentence.attrib['id'])
+            if sid in references.keys():
+                for tokens in sentences.iter('tokens'):
+                    s = ' '.join([token.find('word').text for token in tokens.iter('token')])
+                    reference = references[sid]
+                    s.replace(reference['directive'], '[{}]({})'.format(reference['directive'], reference['replace_with']))
+                    print(s)
+            else:
+                for tokens in sentences.iter('tokens'):
+                    for token in tokens.iter('token'):
+                        pass
+                        # print(token.find('word').text, end=' ')
+            print()
+
+def fiftyseven():
+    import pydot
+    import xml.etree.ElementTree as ET
+    tree = ET.parse('./nlp.txt.xml')
+    root = tree.getroot()
+
+    ldependencies = []
+
+    for dependencies in root.iter('dependencies'):
+        ldeps = []
+        for dep in dependencies.iter('dep'):
+            ldeps.append([int(dep.find('governor').attrib['idx']), int(dep.find('dependent').attrib['idx'])])
+        ldependencies.append(ldeps)
+    for i, ldependency in enumerate(ldependencies):
+        g=pydot.graph_from_edges(ldependency)
+        g.write_jpeg('{}.jpg'.format(i), prog='dot')
+
+def fiftyeight():
+    pass
+
+def fiftynine():
+    pass
+
+def seventyone(word):
+    stopwords = ['i', 'you']
+    return not word.lower() in stopwords
+
+def test(line='i like you'):
+    print(list(filter(seventyone, line.split())))
+
+def seventytwo():
+    from stemming.porter2 import stem
+    d = util.load_json('./posneg.json')
+    parsed_d = []
+    for line in d:
+        tag, line = line.split('\t')
+        line = ' '.join([stem(w).lower() for w in list(filter(seventyone, line.split()))])
+        parsed_d.append('{}\t{}'.format(tag, line))
+
+    return parsed_d
+
+def get_onehot(wid, vocab_n):
+    li = [0] * vocab_n
+    li[wid] = 1
+    return li
+
+def sigmoid(z):
+    import numpy as np
+    return 1.0 / (1 + np.exp(-z))
+
+def get_dataset(d_n=None):
+    import numpy as np
+    from tqdm import tqdm
+    d = seventytwo()
+    vocab = sobamchan_vocabulary.Vocabulary()
+    [vocab.new(line.split('\t')[1]) for line in d]
+    X = []
+    Y = []
+    print('building dataset')
+    if d_n:
+        d = d[:d_n]
+    for line in tqdm(d):
+        tag, line = line.split('\t')
+        if '+' in tag:
+            tag = 1
+        else:
+            tag = 0
+        line = np.array([get_onehot(vocab.w2i[word], len(vocab)) for word in line.split()])
+        vec = np.sum(line, axis=0)
+        X.append(vec)
+        Y.append(tag)
+    X = np.array(X)
+    Y = np.array(Y)
+    
+    return X, Y, vocab
+
+def seventythree():
+    import numpy as np
+    from tqdm import tqdm
+    X, Y, vocab = get_dataset()
+    N = len(X)
+    W = np.random.rand(len(vocab))
+
+    print('learning')
+    eta = 0.1
+    for _ in tqdm(range(50)):
+        fail = 0
+        for i in range(N):
+            xn = X[i, :]
+            yn = Y[i]
+            predict = sigmoid(np.inner(W, xn))
+            W -= eta * (predict - yn) * xn
+        eta *= 0.9
+
+    return X, Y, W, vocab
+
+def seventyfour():
+    # included in seventythree
+    pass
+
+def seventyfive():
+    import numpy as np
+    X, _, W, vocab = seventythree()
+    sorted_args_W = np.argsort(W)
+    for i in sorted_args_W[:10]:
+        print(vocab.i2w[i])
+    for i in sorted_args_W[-10:]:
+        print(vocab.i2w[i])
+
+def seventysix():
+    import numpy as np
+    X, Y, W, vocab = seventythree()
+    correct = 0
+    print('testing model')
+    result = []
+    for x, y in zip(X, Y):
+        predict = sigmoid(np.inner(W, x))
+        predict_bin = 1 if predict > 0.5 else 0
+        correct = correct + 1 if y == predict_bin else correct
+        result.append(('{}\t{}\t{}'.format(y, predict_bin, predict)))
+    print('Accuracy: ', correct / len(X))
+
+    return result
+
+def seventyseven():
+    results = seventysix()
+    tp = 0
+    fp = 0
+    tn = 0
+    fn = 0
+    for result in results:
+        t, y, predict = result.split('\t')
+        if t == 1 and y == 1:
+            tp += 1
+        if t == 1 and y == 0:
+            tn += 1
+        if t == 0 and y == 1:
+            tn += 1
+        if t == 0 and y == 0:
+            fn += 1
+    precision = tp/(tp+fp)
+    recall = tp/(tp+fn)
+    print('precision: {}'.format(precision))
+    print('recall: {}'.format(recall))
+    print('F-measure: {}'.format((2*recall)/(recall+precision)))
+
+def seventyeight():
+    import numpy as np
+    from tqdm import tqdm
+    X, Y, vocab = get_dataset()
+    train_N = int(len(X) * 0.5)
+    train_X = X[:train_N]
+    test_X = X[train_N:]
+    train_Y = Y[:train_N]
+    test_Y = Y[train_N:]
+    train_N = len(train_X)
+    test_N = len(test_X)
+
+    W = np.random.rand(len(vocab))
+
+    print('learning')
+    eta = 0.1
+    for _ in tqdm(range(50)):
+        for i in range(train_N):
+            xn = train_X[i, :]
+            yn = train_Y[i]
+            predict = sigmoid(np.inner(W, xn))
+            W -= eta * (predict - yn) * xn
+        eta *= 0.9
+
+    correct = 0
+    for i in range(test_N):
+        xn = test_X[i, :]
+        yn = test_Y[i]
+        predict = sigmoid(np.inner(W, xn))
+        predict_bin = 1 if predict > 0.5 else 0
+        correct = correct + 1 if yn == predict_bin else correct
+    print('test accuracy: {}'.format(correct/test_N))
+
+def seventynine():
+    pass
+
+def eighty():
+    from tqdm import tqdm
+    import  re
+    lines = util.readlines_from_filepath('./enwiki-20150112-400-r10-105752.txt')
+    ptn = r'^[\.,!\?;:\(\)\[\]\'"]?(\w+)[\.,!\?;:\(\)\[\]\'"]?$'
+    ptn_compiled = re.compile(ptn)
+    tokens = [ptn_compiled.search(word.strip().lower()).group() if ptn_compiled.search(word.lower()) else '' for line in tqdm(lines) for word in line.strip().split()]
+    tokens = list(filter(lambda x:len(x)>0, tokens))
+    with open('parsed_enwiki.txt', 'w') as f:
+        f.write(' '.join(tokens))
+
+def eightyone():
+    from tqdm import tqdm
+    import re
+    d = util.readlines_from_filepath('./parsed_enwiki.txt')[0]
+    countries = util.readlines_from_filepath('./country_list.txt')
+    countries = [country.strip().lower() for country in countries]
+    countries = [country.split(';')[0] for country in countries]
+    countries_space = [country.replace(' ', '_') for country in countries]
+    for country, country_space in tqdm(zip(countries, countries_space)):
+        r = re.compile(r'{}'.format(country))
+        d = r.sub(country_space, d)
+    with open('parsed_enwiki_spaced.txt', 'w') as f:
+        f.write(d)
+
+def eightytwo():
+    import random
+    from tqdm import tqdm
+    d = util.readlines_from_filepath('./parsed_enwiki_spaced.txt')[0]
+    N = len(d)
+    li = []
+    dsplit = d.split()
+    for i, word in tqdm(enumerate(dsplit), total=len(dsplit)):
+        window_n = random.choice([1,2,3,4,5])
+        start = i - window_n if i - window_n > 0 else 0
+        end = i + window_n if i - window_n <= N else N
+        context = '\t'.join(dsplit[start:i] + dsplit[i:end])
+        li.append('{}\t{}'.format(word, context))
+    # util.save_json(li, './enwiki_context.json')
+    return li
+    
+def eightythree():
+    from tqdm import tqdm
+    from collections import Counter
+    # ds = util.load_json('./enwiki_context.json')
+    ds = eightytwo()
+    ftc = Counter()
+    ft = Counter()
+    fc = Counter()
+    for d in tqdm(ds):
+        word = d.split('\t')[0]
+        context = '\t'.join(d.split('\t')[1:])
+        ftc[d] += 1
+        ft[word] += 1
+        fc[context] += 1
+    N = len(ftc)
+
+    return ftc, ft, fc, N
+
+def eightyfour():
+    import math
+    from tqdm import tqdm
+    import pickle
+    X = []
+    ftc, ft, fc, N = eightythree()
+    # ds = util.load_json('./enwiki_context.json')
+    ds = eightytwo()
+
+    words = list(ft.values())
+    contexts = list(fc.values())
+
+    for word in tqdm(words):
+        x_word = []
+        for context in contexts:
+            d = '{}\t{}'.format(word, context)
+            if ftc[d] > 10:
+                if (N * ftc[d]) / (ft[word] * fc[context]) != 0:
+                    ppmi = max(math.log((N * ftc[d]) / (ft[word] * fc[context])), 0) 
+                else:
+                    ppmi = 0
+            else:
+                ppmi = 0
+            x_word.append(ppmi)
+        X.append(x_word)
+
+    print(len(X))
+    print(len(X[0]))
+    print(len(X[1]))
+    pickle.dump(file='./X.pkl', obj=X)
 
 fire.Fire()
